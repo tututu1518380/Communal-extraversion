@@ -552,4 +552,123 @@ for (cc in 1:length(Cell)) {
     ThickComFDR <- inner_join(ThickComFDR,CellAll)
   }
 }
+##########################################################
+#                   Cell-type Analysis                   #
+##########################################################
+library(openxlsx)
+library(tidyverse)
+rm(list=ls())
+setwd("D:\\Rdata\\group_SLIM_stats\\PlasticityAnalysis\\EnrichmentAnalysis\\")
+VolComFDR <- read.csv("VolComFDR.csv")
+ThickComFDR <- read.csv("ThickComFDR.csv")
+Celltype <- read.xlsx("celltype.xlsx")
+Celltype <- Celltype[,-(1:3)]
+Celltype$Class <- str_remove(Celltype$Class,"-")
+Cell <- unique(Celltype$Class)[-c(8,9)]
+
+CellAll <- data.frame()
+# 
+for (cc in 1:length(Cell)) {
+  if(length(grep("TRUE",duplicated(CellAll)))!=0) {
+    print("ERROR:Duplicate in CellAll")
+    break
+  }
+  print(Cell[cc])
+  Temp <- subset(Celltype,Celltype$Class==Cell[cc])
+  TempNaRm <- Temp[apply(Temp,c(1,2),function(x) !any(is.na(x)))]
+  cmd <- paste0(Cell[cc]," <- data.frame(Celltype=Cell[cc],Gene=unique(TempNaRm)[-1])")
+  eval(parse(text=cmd))
+  if (ncol(get(Cell[cc]))>2) rm(list = Cell)
+  CellAll <- rbind(CellAll,get(Cell[cc]))
+  if(cc==length(Cell)){ 
+    VolComFDR <- inner_join(VolComFDR,CellAll)
+    ThickComFDR <- inner_join(ThickComFDR,CellAll)
+  }
+}
+
+
+gene_celltype_overlap <- VolComFDR #ThickComFDR VolComFDR
+
+# permutation
+set.seed(773)
+perm <- 5000
+gene_celltype_overlap_sig_neg <- gene_celltype_overlap[gene_celltype_overlap$Zfdr < -1.96,]
+gene_celltype_overlap_sig_pos <- gene_celltype_overlap[gene_celltype_overlap$Z > 1.96,]
+store_df <- matrix(nrow = 7,ncol = 5,0)%>%
+  data.frame()
+store_df2 <- matrix(nrow = 7,ncol = 3,0)%>%
+  data.frame()
+colnames(store_df2) <- c("cell","genenum_pos_perm","genenum_neg_perm")
+colnames(store_df) <- c("cell","genenum_pos","p_pos","genenum_neg","p_neg")
+store_df[,1] <- Cell
+store_df2[,1] <- Cell
+pos_df <- data.frame(matrix(0,5000,7,dimnames = list(1:5000,Cell)))
+neg_df <- data.frame(matrix(0,5000,7,dimnames = list(1:5000,Cell)))
+
+
+for (i in 1:perm) {
+  print(i)
+  index <- sample(nrow(gene_celltype_overlap))
+  gene_celltype_overlap_char <- gene_celltype_overlap[index,7]
+  gene_celltype_overlap_perm <- cbind(gene_celltype_overlap[,1:6],Celltype = gene_celltype_overlap_char)
+  gene_celltype_overlap_sig_neg_perm <- gene_celltype_overlap_perm[gene_celltype_overlap_perm$Z < -1.96,]
+  gene_celltype_overlap_sig_pos_perm <- gene_celltype_overlap_perm[gene_celltype_overlap_perm$Z > 1.96,]
+  for (j in 1:length(Cell)) {
+    num_pos <- length(grep(store_df[j,1],gene_celltype_overlap_sig_pos[,7]))
+    num_neg <- length(grep(store_df[j,1],gene_celltype_overlap_sig_neg[,7]))
+    store_df[j,2] <- num_pos
+    store_df[j,4] <- num_neg
+    num_pos_perm <- length(grep(store_df[j,1],gene_celltype_overlap_sig_pos_perm[,7]))
+    num_neg_perm <- length(grep(store_df[j,1],gene_celltype_overlap_sig_neg_perm[,7]))
+    pos_df[i,j] <- num_pos_perm
+    neg_df[i,j] <- num_neg_perm
+    if (num_pos_perm > store_df[j,2]) {
+      store_df2[j,2] <- store_df2[j,2] + 1
+    }
+    if (num_neg_perm > store_df[j,4]) {
+      store_df2[j,3] <- store_df2[j,3] + 1
+    }
+  }
+  if (i == 5000) {
+    for (m in 1:length(Cell)) {
+      store_df[m,3] <- store_df2[m,2]/perm
+      store_df[m,5] <- store_df2[m,3]/perm
+    }
+  }
+}
+colnames(genes) <- c("Gene",region_name[1:180,])#ÕûÀíºó
+meanExpCal <- function(cellName){
+  innerJoinDf <- inner_join(genes,cellName)
+  expTemp <- data.frame(exp=colMeans(innerJoinDf[,2:181]))
+  expTemp$region <- rownames(expTemp)
+  expTemp$exp <- scale(expTemp$exp)
+  return(expTemp)
+}
+for (c in 1:length(Cell)) {
+  cell <- get(Cell[c])
+  cmd <- paste0(Cell[c],"Exp <- meanExpCal(cell)")
+  eval(parse(text=cmd))
+}
+
+expDf <- paste0(Cell,"Exp")
+library(ggseg)
+library()
+Oligoplot <- ggseg (OligoExp,atlas = glasser,hemisphere = "left" , 
+                    mapping = aes(fill = exp),colour = "black",
+                    show.legend = T, 
+                    position = "stacked") +
+  scale_fill_gradient2(low="purple",high="orange",mid = "white")+
+  labs(title = "Oligodendrocytes",fill = "Z-score")+
+  theme_void()+
+  theme(text=element_text(size=16,  family="serif"))
+ggsave("D:\\Rdata\\group_SLIM_stats\\PlasticityAnalysis\\EnrichmentAnalysis\\Cell\\Oligoplot.pdf",Oligoplot)
+Endoplot <- ggseg (EndoExp,atlas = glasser,hemisphere = "left" , 
+                   mapping = aes(fill = exp),colour = "black",
+                   show.legend = T, 
+                   position = "stacked",) +
+  scale_fill_gradient2(low="purple",high="orange",mid = "white")+
+  labs(title = "Endothelial",fill = "Z-score")+
+  theme_void()+
+  theme(text=element_text(size=16,  family="serif"))
+ggsave("D:\\Rdata\\group_SLIM_stats\\PlasticityAnalysis\\EnrichmentAnalysis\\Cell\\Endoplot.pdf",Endoplot)
 

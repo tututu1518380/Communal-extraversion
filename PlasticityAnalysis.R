@@ -525,36 +525,6 @@ for (ss in 1:length(Var)) {
 ##########################################################
 #                   Cell-type Analysis                   #
 ##########################################################
-setwd("D:\\Rdata\\group_SLIM_stats\\PlasticityAnalysis\\EnrichmentAnalysis\\")
-VolComFDR <- read.csv("VolComFDR.csv")
-ThickComFDR <- read.csv("ThickComFDR.csv")
-Celltype <- read.xlsx("celltype.xlsx")
-Celltype <- Celltype[,-(1:3)]
-Celltype$Class <- str_remove(Celltype$Class,"-")
-Cell <- unique(Celltype$Class)[-c(8,9)]
-
-CellAll <- data.frame()
-# 
-for (cc in 1:length(Cell)) {
-  if(length(grep("TRUE",duplicated(CellAll)))!=0) {
-    print("ERROR:Duplicate in CellAll")
-    break
-  }
-  print(Cell[cc])
-  Temp <- subset(Celltype,Celltype$Class==Cell[cc])
-  TempNaRm <- Temp[apply(Temp,c(1,2),function(x) !any(is.na(x)))]
-  cmd <- paste0(Cell[cc]," <- data.frame(Celltype=Cell[cc],Gene=unique(TempNaRm)[-1])")
-  eval(parse(text=cmd))
-  if (ncol(get(Cell[cc]))>2) rm(list = Cell)
-  CellAll <- rbind(CellAll,get(Cell[cc]))
-  if(cc==length(Cell)){ 
-    VolComFDR <- inner_join(VolComFDR,CellAll)
-    ThickComFDR <- inner_join(ThickComFDR,CellAll)
-  }
-}
-##########################################################
-#                   Cell-type Analysis                   #
-##########################################################
 library(openxlsx)
 library(tidyverse)
 rm(list=ls())
